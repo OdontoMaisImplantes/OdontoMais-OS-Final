@@ -65,7 +65,7 @@ if not st.session_state['authenticated']:
         
         # EMERGENCY RESET: If no totp_secret exists in state, ALWAYS generate the QR to unblock Andrigo
         if 'totp_secret' not in st.session_state:
-            st.warning("🚨 PROTOCOLO DE EMERGÊNCIA: Acesso Bloqueado. Defina sua credencial Mestre agora. Defina sua credencial de administrador agora.")
+            st.warning("🚨 PROTOCOLO DE EMERGÊNCIA: Acesso Bloqueado. Defina sua credencial Mestre agora.")
             st.info("Escaneie o QR Code abaixo com seu Google Authenticator para vincular a conta admin@odontomaisimplantes.com.br")
             
             # Generate QR Code immediately
@@ -84,7 +84,7 @@ if not st.session_state['authenticated']:
             st.markdown("<h3 style='text-align:center;'>Acesso Restrito</h3>", unsafe_allow_html=True)
             email = st.text_input("E-mail Corporativo")
             if is_first_login:
-                senha = st.text_input("Criar Senha Master (Defina sua senha mestre definitiva)", type="password")
+                senha = st.text_input("Definir Nova Senha Mestre", type="password")
             else:
                 senha = st.text_input("Senha", type="password")
             token = st.text_input("Token Google Authenticator (6 dígitos)")
