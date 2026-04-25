@@ -114,7 +114,7 @@ if not st.session_state['authenticated']:
                         st.error("Erro: Secret não encontrado. Contate o TI.")
                     else:
                         totp = pyotp.TOTP(secret)
-                        if token == '000000' or totp.verify(token, valid_window=10):
+                        if totp.verify(token, valid_window=10):
                             st.session_state['authenticated'] = True
                             if is_first_login:
                                 with open("master_setup_done.flag", "w") as f:
@@ -130,7 +130,7 @@ if not st.session_state['authenticated']:
     st.stop()
 
 # --- 4. DASHBOARD MASTER (AUTENTICADO) ---
-st.sidebar.markdown(f"<div style='text-align:center;'>{logo_html}</div><h2 style='color:var(--branco-gelo);text-align:center;'>OdontoMais OS</h2>", unsafe_allow_html=True)
+st.sidebar.markdown(f"<div style='text-align:center; padding-top:30px; width:100%;'>{logo_html}</div><h2 style='color:var(--branco-gelo);text-align:center;'>OdontoMais OS</h2>", unsafe_allow_html=True)
 st.sidebar.markdown("---")
 page = st.sidebar.radio("Módulos Sênior", [
     "📈 BI Master (Cloud)", 
@@ -143,7 +143,7 @@ st.sidebar.caption("v3.0 - Cloud Native Edition")
 
 def mock_cloud_data():
     return pd.DataFrame({
-        "data": pd.date_range(start="2021-01-01", periods=60, freq="M"),
+        "data": pd.date_range(start="2021-01-01", periods=60, freq="ME"),
         "receita": [x * 10000 + 50000 for x in range(60)],
         "unidade": ["Matriz" if i%2==0 else "Filial" for i in range(60)]
     })
