@@ -56,7 +56,7 @@ if 'authenticated' not in st.session_state:
 FIRST_LOGIN = not os.path.exists("master_setup_done.flag")
 
 if not st.session_state['authenticated']:
-    st.markdown(f"<div class='logo-img'>{logo_html}<h1>OdontoMais Implantes</h1><h3>Login Corporativo Seguro</h3></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='logo-img'>{logo_html}</div>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
@@ -83,13 +83,26 @@ if not st.session_state['authenticated']:
         with st.form("login_form"):
             st.markdown("<h3 style='text-align:center;'>Acesso Restrito</h3>", unsafe_allow_html=True)
             email = st.text_input("E-mail Corporativo")
-            senha = st.text_input("Senha", type="password")
+            if is_first_login:
+                senha = st.text_input("Criar Senha Master (Defina sua senha mestre definitiva)", type="password")
+            else:
+                senha = st.text_input("Senha", type="password")
             token = st.text_input("Token Google Authenticator (6 dígitos)")
             submit = st.form_submit_button("Validar e Entrar")
             
         if submit:
             if email == "admin@odontomaisimplantes.com.br" or email.endswith("@odontomaisimplantes.com.br"):
-                if senha == "OdontoMais@2025":
+                # Se for o primeiro login, salva a senha definida pelo usuario no estado
+                if is_first_login:
+                    if len(senha) < 6:
+                        st.error("A senha master deve ter no mínimo 6 caracteres.")
+                    else:
+                        st.session_state['master_password'] = senha
+                        
+                # Verifica a senha: usa a senha do estado se existir (foi definida no first login), senão usa a padrão mock (em produção isso vai pro BD)
+                expected_password = st.session_state.get('master_password', "OdontoMais@2025")
+                
+                if senha == expected_password:
                     secret = st.session_state.get('totp_secret')
                     if not secret:
                         st.error("Erro: Secret não encontrado. Contate o TI.")
@@ -100,7 +113,7 @@ if not st.session_state['authenticated']:
                             if is_first_login:
                                 with open("master_setup_done.flag", "w") as f:
                                     f.write("done")
-                                st.success("✅ Vínculo Master Estabelecido!")
+                                st.success("✅ Vínculo Master e Senha Estabelecidos com Sucesso!")
                             st.rerun()
                         else:
                             st.error("Token Inválido ou Expirado.")
