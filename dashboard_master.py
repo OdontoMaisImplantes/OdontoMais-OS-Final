@@ -49,6 +49,9 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
+# CSS GLOBAL DE ALTO CONTRASTE REQUISITADO PELO USUARIO
+st.markdown("""<style> input { color: #FFFFFF !important; -webkit-text-fill-color: #FFFFFF !important; font-weight: bold !important; } </style>""", unsafe_allow_html=True)
+
 # --- 3. SISTEMA DE AUTENTICAÇÃO E TOTP ---
 if 'authenticated' not in st.session_state:
     st.session_state['authenticated'] = False
@@ -108,7 +111,7 @@ if not st.session_state['authenticated']:
                         st.error("Erro: Secret não encontrado. Contate o TI.")
                     else:
                         totp = pyotp.TOTP(secret)
-                        if totp.verify(token):
+                        if totp.verify(token, valid_window=1):
                             st.session_state['authenticated'] = True
                             if is_first_login:
                                 with open("master_setup_done.flag", "w") as f:
