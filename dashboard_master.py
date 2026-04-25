@@ -50,7 +50,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # CSS GLOBAL DE ALTO CONTRASTE REQUISITADO PELO USUARIO
-st.markdown("""<style> input { color: #FFFFFF !important; -webkit-text-fill-color: #FFFFFF !important; font-weight: bold !important; } </style>""", unsafe_allow_html=True)
+st.markdown("""<style> input[type="text"], input[type="password"], input[type="number"] { color: #FFFFFF !important; font-size: 18px !important; font-weight: bold !important; -webkit-text-fill-color: #FFFFFF !important; } </style>""", unsafe_allow_html=True)
 
 # --- 3. SISTEMA DE AUTENTICAÇÃO E TOTP ---
 if 'authenticated' not in st.session_state:
@@ -111,7 +111,7 @@ if not st.session_state['authenticated']:
                         st.error("Erro: Secret não encontrado. Contate o TI.")
                     else:
                         totp = pyotp.TOTP(secret)
-                        if totp.verify(token, valid_window=1):
+                        if totp.verify(token, valid_window=2):
                             st.session_state['authenticated'] = True
                             if is_first_login:
                                 with open("master_setup_done.flag", "w") as f:
