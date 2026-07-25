@@ -6,6 +6,7 @@ from docx import Document
 import pyotp
 import qrcode
 import base64
+import hashlib
 from io import BytesIO
 
 try:
@@ -61,13 +62,67 @@ if 'authenticated' not in st.session_state:
 
 FIRST_LOGIN = not os.path.exists("master_setup_done.flag")
 
+# --- Persistencia de credenciais (Rodada 58): o segredo TOTP e a senha
+# mestre ficavam apenas em st.session_state e eram perdidos a cada
+# sessao/restart, forcando o re-vinculo de emergencia toda vez. Agora sao
+# gravados em disco para que o acesso seja estavel. ---
+TOTP_SECRET_FILE = "totp_secret.key"
+MASTER_HASH_FILE = "master_password.hash"
+DEFAULT_MASTER_PASSWORD = "OdontoMais@2025"
+
+def _hash_pw(pw):
+    return hashlib.sha256(str(pw).encode()).hexdigest()
+
+def _load_totp_secret():
+    if st.session_state.get('totp_secret'):
+        return st.session_state['totp_secret']
+    try:
+        if os.path.exists(TOTP_SECRET_FILE):
+            with open(TOTP_SECRET_FILE) as f:
+                sec = f.read().strip()
+            if sec:
+                st.session_state['totp_secret'] = sec
+                return sec
+    except Exception as e:
+        print('Falha ao ler TOTP secret:', e)
+    return None
+
+def _save_totp_secret(secret):
+    try:
+        with open(TOTP_SECRET_FILE, "w") as f:
+            f.write(secret)
+    except Exception as e:
+        print('Falha ao gravar TOTP secret:', e)
+
+def _load_master_hash():
+    try:
+        if os.path.exists(MASTER_HASH_FILE):
+            with open(MASTER_HASH_FILE) as f:
+                h = f.read().strip()
+            if h:
+                return h
+    except Exception as e:
+        print('Falha ao ler hash mestre:', e)
+    return None
+
+def _save_master_hash(pw):
+    try:
+        with open(MASTER_HASH_FILE, "w") as f:
+            f.write(_hash_pw(pw))
+    except Exception as e:
+        print('Falha ao gravar hash mestre:', e)
+
+_load_totp_secret()
+# Uma senha so e considerada definida quando existe hash em disco.
+is_first_login = _load_master_hash() is None
+
 if not st.session_state['authenticated']:
     st.markdown(f"<div class='logo-img'>{logo_html}</div>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        # Check if master setup is done
-        is_first_login = not os.path.exists("master_setup_done.flag")
+        # Primeiro acesso = nenhuma senha mestre gravada em disco (Rodada 58)
+        # (a variavel is_first_login ja foi resolvida acima, aqui apenas documentamos)
         
         # EMERGENCY RESET: If no totp_secret exists in state, ALWAYS generate the QR to unblock Andrigo
         if 'totp_secret' not in st.session_state:
@@ -77,6 +132,7 @@ if not st.session_state['authenticated']:
             # Generate QR Code immediately
             secret = pyotp.random_base32()
             st.session_state['totp_secret'] = secret
+            _save_totp_secret(secret)
             uri = pyotp.totp.TOTP(secret).provisioning_uri(name="admin@odontomaisimplantes.com.br", issuer_name="OdontoMais OS Premium")
             qr = qrcode.make(uri)
             buf = BytesIO()
@@ -98,17 +154,23 @@ if not st.session_state['authenticated']:
             
         if submit:
             if email == "admin@odontomaisimplantes.com.br" or email.endswith("@odontomaisimplantes.com.br"):
-                # Se for o primeiro login, salva a senha definida pelo usuario no estado
-                if is_first_login:
-                    if len(senha) < 6:
-                        st.error("A senha master deve ter no mínimo 6 caracteres.")
-                    else:
-                        st.session_state['master_password'] = senha
+                # No primeiro acesso a senha digitada vira a senha mestre (>=6).
+                senha_ok_len = True
+                if is_first_login and len(senha) < 6:
+                    senha_ok_len = False
+                    st.error("A senha master deve ter no mínimo 6 caracteres.")
                         
-                # Verifica a senha: usa a senha do estado se existir (foi definida no first login), senão usa a padrão mock (em produção isso vai pro BD)
-                expected_password = st.session_state.get('master_password', "OdontoMais@2025")
+                # Verifica a senha: no primeiro acesso qualquer senha valida (>=6)
+                # e aceita e gravada; depois, compara com o hash persistido.
+                stored_hash = _load_master_hash()
+                if is_first_login:
+                    senha_valida = senha_ok_len
+                elif stored_hash:
+                    senha_valida = _hash_pw(senha) == stored_hash
+                else:
+                    senha_valida = senha == DEFAULT_MASTER_PASSWORD
                 
-                if senha == expected_password:
+                if senha_valida:
                     secret = st.session_state.get('totp_secret')
                     if not secret:
                         st.error("Erro: Secret não encontrado. Contate o TI.")
@@ -117,6 +179,7 @@ if not st.session_state['authenticated']:
                         if totp.verify(token, valid_window=10):
                             st.session_state['authenticated'] = True
                             if is_first_login:
+                                _save_master_hash(senha)
                                 with open("master_setup_done.flag", "w") as f:
                                     f.write("done")
                                 st.success("✅ Vínculo Master e Senha Estabelecidos com Sucesso!")
@@ -208,6 +271,23 @@ elif page == "🔎 Power Search Cloud":
                         """, unsafe_allow_html=True)
                 else:
                     st.warning("Nenhum registro encontrado no Cluster.")
+            else:
+                # Status Financeiro: lista pacientes com pendencias (mock ate o BD real)
+                df_fin = df_p.copy()
+                df_fin["status"] = ["Em dia", "Inadimplente", "Negociação"][:len(df_fin)]
+                res = df_fin
+                if query_clean:
+                    res = df_fin[df_fin["status"].str.lower().str.contains(query_clean, na=False)]
+                if not res.empty:
+                    for _, r in res.iterrows():
+                        st.markdown(f"""
+                        <div class='card'>
+                            <h4>{r['nome']} — <span style='color:#d1175c;'>{r['status']}</span></h4>
+                            <p><b>CPF:</b> {r['cpf']} | <b>Telefone:</b> {r['telefone']}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                else:
+                    st.info("Dica: deixe o termo em branco para ver todos, ou busque por 'Inadimplente', 'Em dia' ou 'Negociação'.")
 
 elif page == "⚖️ Contratos e Termos":
     st.title("Central de Operações Jurídicas")
@@ -230,7 +310,22 @@ elif page == "⚖️ Contratos e Termos":
             doc_o.add_paragraph("Ticket Médio Vinculado: R$ 607,25")
             doc_o.save("Orcamento_Cloud.docx")
             
-            st.success("✅ Documentos Gerados! Pronto para Download.")
+            st.success("✅ Documentos Gerados! Faça o download abaixo.")
+            dcol1, dcol2, dcol3 = st.columns(3)
+            for _dcol, _fname, _label in (
+                (dcol1, "Contrato_Cloud.docx", "⬇️ Contrato"),
+                (dcol2, "Termo_Cloud.docx", "⬇️ Termo"),
+                (dcol3, "Orcamento_Cloud.docx", "⬇️ Orçamento"),
+            ):
+                try:
+                    with open(_fname, "rb") as _fh:
+                        _dcol.download_button(
+                            _label, _fh.read(), file_name=_fname,
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True,
+                        )
+                except Exception as _e:
+                    _dcol.error(f"Falha ao preparar {_fname}")
 
 elif page == "⭐ NPS Avançado":
     st.title("Gestão de Satisfação e Reputação")
@@ -245,7 +340,8 @@ elif page == "⭐ NPS Avançado":
     if sub:
         if nota >= 9:
             st.success("✅ Fluxo Positivo! Disparando convite automático para Google Review.")
-            st.markdown("<a href='https://g.page/r/YOUR_LINK_HERE/review' target='_blank' style='background:#d1175c;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;font-weight:bold;'>Ir para Google Review</a>", unsafe_allow_html=True)
+            review_url = os.environ.get("GOOGLE_REVIEW_URL", "https://search.google.com/local/writereview?placeid=")
+            st.markdown(f"<a href='{review_url}' target='_blank' style='background:#d1175c;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;font-weight:bold;'>Ir para Google Review</a>", unsafe_allow_html=True)
         else:
             st.error("⚠️ Alerta de Contenção de Danos! Ticket Médio de R$ 607,25 em Risco.")
             st.text_area("Descreva a causa raiz da insatisfação para auditoria gerencial:")

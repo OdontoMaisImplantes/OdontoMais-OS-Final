@@ -1,0 +1,15 @@
+# Runtime credential / state files (nunca versionar segredos)
+totp_secret.key
+master_password.hash
+master_setup_done.flag
+
+# Documentos gerados em runtime
+Contrato_Cloud.docx
+Termo_Cloud.docx
+Orcamento_Cloud.docx
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
